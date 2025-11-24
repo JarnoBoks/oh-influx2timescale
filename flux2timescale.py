@@ -1,0 +1,246 @@
+from influxdb_client import InfluxDBClient
+
+import psycopg2
+from psycopg2 import sql
+
+import urllib.request
+import time
+
+# ------------ CONSTANTS AND SETUP ----------------------------------
+from mysecrets import *
+from mynumbers import *
+from mycontacts import *
+from myswitches import *
+
+# Setup InfluxDB client
+influx = InfluxDBClient(url=influxdb_url, token=influxdb_token, org=influxdb_org, timeout=400000)
+
+# Setup the Output file
+output_file_path = "flux2timescale_output"
+
+from datetime import datetime
+current_datetime = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+print(current_datetime)
+output_file_path = output_file_path + "_" + current_datetime + ".log"
+import os
+if os.path.exists(output_file_path):
+  os.remove(output_file_path)
+
+output_file = open(output_file_path, "x")
+
+# ---------------------------------------------------------------------------   FUNCTIONS
+
+# Write to file and print to console
+def write_to_file(f,x):
+    f.write(x)
+    f.write("\n")
+    print(x);
+
+# Run a list of SQL statements
+def run_sql_statements(fle, statements):
+    err = False
+    # Database connection settings
+    conn_info = {
+        "host": timescale_db_host,
+        "port": timescale_db_port,
+        "dbname": timescale_db_name,
+        "user": timescale_db_user,
+        "password": timescale_db_password
+    }
+
+    try:
+        # Connect to PostgreSQL
+        conn = psycopg2.connect(**conn_info)
+        conn.autocommit = False  # you control commits
+        cur = conn.cursor()
+
+        for s in statements:
+            write_to_file(fle, f"Executing: {s}")
+            cur.execute(s)
+
+        conn.commit()
+        write_to_file(fle,"All statements executed successfully!")
+
+    except Exception as e:
+        conn.rollback()
+        write_to_file(fle,"Error occurred, rolled back.")
+        write_to_file(fle,str(e))
+        err = True
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+        return err
+
+# Call the openHAB REST API to add or remove an item from a group
+def openhab_rest_api(item, group, addgroup):
+    url=f"https://openhab.lan.ratatosk.nl/rest/items/{group}/members/{item}"
+
+    write_to_file(output_file,f"Calling url: {url}");
+
+    if addgroup:
+        req = urllib.request.Request(url, method='PUT')
+    else:
+        req = urllib.request.Request(url, method='DELETE')
+
+    authorization_header = "Bearer " + openhabAPI_token
+    req.add_header("Authorization", authorization_header)
+    req.add_header("Content-Type","text/plain")
+
+    with urllib.request.urlopen(req) as response:
+        status = response.status
+        content = response.read()
+
+        write_to_file(output_file,f"Status Code: {status}")
+        write_to_file(output_file,f"Content Length: {len(content)} bytes")
+        write_to_file(output_file,f"\nFirst 500 characters of response:\n{content.decode('utf-8')[:500]}")
+
+def setup_flux(source_flux, measurement):
+    schema = source_flux.replace("<measurement>", measurement)
+    schema = schema.replace("<username>", timescale_db_user)
+    schema = schema.replace("<password>", timescale_db_password)
+    schema = schema.replace("<host>", timescale_db_host)
+    schema = schema.replace("<port>", str(timescale_db_port))
+    schema = schema.replace("<dbname>", timescale_db_name)
+    return schema
+
+def setup_table(measurement):
+# Ensure that openHAB creates the Hypertable
+    write_to_file(output_file,f"Adding {measurement} to 'persist_jdbc_everysecond' group for creation of hypertable.")
+    openhab_rest_api(measurement,"persist_jdbc_everysecond",True)
+    print("Sleeping for 10s so openHab can create the hypertable")
+    time.sleep(10)
+    write_to_file(output_file,f"Removing {measurement} from 'persist_jdbc_everysecond' group after creation of hypertable.")
+    openhab_rest_api(measurement,"persist_jdbc_everysecond",False)
+
+
+def migrate_measurement(measurement):
+    flux = setup_flux(schema,measurement)
+    write_to_file(output_file,f"Exporting measurement {measurement}...")
+    influx.query_api().query(flux)
+
+# Ensure that openHAB creates the Hypertable
+    setup_table(measurement)
+
+# Migrate the measurement
+
+# a. Delete any rows in the openHAB created table by the 'everysecond' persistance
+# b. Enable compression on the openHAB created hypertable.
+# c. Insert all Influxdata items into the Hypertable
+# d. Drop the _old table
+# e. Manualy compress the hypertable
+# f. Set a default compression policy on the hypertable
+    sql_statements = [
+      "DELETE FROM \"<measurement>\";",
+      "ALTER TABLE \"<measurement>\" SET (timescaledb.compress=true);",
+      "INSERT INTO \"<measurement>\" SELECT * FROM \"<measurement>_old\";",
+      "DROP TABLE \"<measurement>_old\";",
+      "SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('\"<measurement>\"',   now()::timestamp - INTERVAL '1 week', now()::timestamp - INTERVAL '5 years'  ) i;",
+      "SELECT add_compression_policy('\"<measurement>\"', INTERVAL '7 days', if_not_exists => true);",
+    ]
+
+    for idx, item in enumerate(sql_statements):
+        sql_statements[idx] = item.replace("<measurement>", measurement)
+
+    return run_sql_statements(output_file,sql_statements)
+
+# ---------------------------------------------------------------------------   SWITCHES
+
+# list of switches
+
+
+# 2. Generate and run export Flux for each measurement, the measurement will be written to the new postgress database with an "_old" postfix.
+if len(switches) > 0:
+    write_to_file(output_file,"\n\n--- Migrating Switches ---\n")
+    for m in switches:
+
+        schema = '''
+    import "sql"
+
+    from(bucket: "oh_bucket")
+    |> range(start: 0)
+    |> filter(fn: (r) => r["_measurement"] == "<measurement>")
+    |> keep(columns: ["_time", "_value"])
+    |> map(fn: (r) => ({r with value: if r._value >= 1 then "ON" else "OFF", })
+            )  |> drop(columns: ["_value"])
+    |> rename(columns: {_time:"time"})
+    |> sql.to(
+            driverName: "postgres",
+            dataSourceName: "postgresql://<username>:<password>@<host>:<port>/<dbname>",
+            table: "<measurement>_old",
+    )
+
+    '''
+
+    # Migrate the measurement
+        error_occured = migrate_measurement(m)
+
+        if error_occured:
+            continue
+
+    # Add the item to the everyChange persistance
+        openhab_rest_api(m,"persist_jdbc_everyupdate",True)
+
+
+if len(numbers) > 0:
+    for m in numbers:
+        schema = '''
+    import "sql"
+
+    from(bucket: "oh_bucket")
+    |> range(start: 0)
+    |> filter(fn: (r) => r["_measurement"] == "<measurement>")
+    |> keep(columns: ["_time", "_value"])
+    |> map(fn: (r) => ({r with value: r._value, })
+            )  |> drop(columns: ["_value"])
+    |> rename(columns: {_time:"time"})
+    |> sql.to(
+            driverName: "postgres",
+            dataSourceName: "postgresql://<username>:<password>@<host>:<port>/<dbname>",
+            table: "<measurement>_old",
+    )
+
+    '''
+    # Migrate the measurement
+        error_occured = migrate_measurement(m)
+
+        if error_occured:
+            continue
+
+    # Add the item to the everyChange persistance
+        openhab_rest_api(m,"persist_jdbc_everychange",True)
+
+if len(contacts) > 0:
+    write_to_file(output_file,"\n\n--- Migrating Contacts ---\n")
+    for m in contacts:
+        schema = '''
+    import "sql"
+
+    from(bucket: "oh_bucket")
+    |> range(start: 0)
+    |> filter(fn: (r) => r["_measurement"] == "<measurement>")
+    |> keep(columns: ["_time", "_value"])
+    |> map(fn: (r) => ({r with value: if r._value >= 1 then "OPEN" else "CLOSED", })
+            )  |> drop(columns: ["_value"])
+    |> rename(columns: {_time:"time"})
+    |> sql.to(
+            driverName: "postgres",
+            dataSourceName: "postgresql://<username>:<password>@<host>:<port>/<dbname>",
+            table: "<measurement>_old",
+    )
+
+    '''
+    # Migrate the measurement
+        error_occured = migrate_measurement(m)
+
+        if error_occured:
+            continue
+
+    # Add the item to the everyChange persistance
+        openhab_rest_api(m,"persist_jdbc_everyupdate",True)
+
+
+# Close the output file
+output_file.close()

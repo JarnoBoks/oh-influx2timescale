@@ -1,0 +1,13 @@
+/__pycache__
+/__pycache__/*
+
+# Ignore mysecrets.py which contains sensitive connection details
+mysecrets.py
+
+# Ignore locat setup files
+mynumbers.py
+myswitches.py
+mycontacts.py
+
+# Ignore output log files
+*.log
