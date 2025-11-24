@@ -10,3 +10,5 @@ timescale_db_user = "<your_timescale_openhabdb_user>"
 timescale_db_password = "<your_timescale_openhabdb_password>"
 
 openhabAPI_token = "xxxxxxxx"  # Replace xxxxxxx with your actual OpenHAB API token
+
+default_string_retention_policy = "7 days"

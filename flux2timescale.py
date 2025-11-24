@@ -11,6 +11,7 @@ from mysecrets import *
 from mynumbers import *
 from mycontacts import *
 from myswitches import *
+from mystrings import *
 
 # Setup InfluxDB client
 influx = InfluxDBClient(url=influxdb_url, token=influxdb_token, org=influxdb_org, timeout=400000)
@@ -55,7 +56,7 @@ def run_sql_statements(fle, statements):
         cur = conn.cursor()
 
         for s in statements:
-            write_to_file(fle, f"Executing: {s}")
+            print(fle, f"Executing: {s}")
             cur.execute(s)
 
         conn.commit()
@@ -78,7 +79,7 @@ def run_sql_statements(fle, statements):
 def openhab_rest_api(item, group, addgroup):
     url=f"https://openhab.lan.ratatosk.nl/rest/items/{group}/members/{item}"
 
-    write_to_file(output_file,f"Calling url: {url}");
+    print(output_file,f"Calling url: {url}");
 
     if addgroup:
         req = urllib.request.Request(url, method='PUT')
@@ -94,8 +95,8 @@ def openhab_rest_api(item, group, addgroup):
         content = response.read()
 
         write_to_file(output_file,f"Status Code: {status}")
-        write_to_file(output_file,f"Content Length: {len(content)} bytes")
-        write_to_file(output_file,f"\nFirst 500 characters of response:\n{content.decode('utf-8')[:500]}")
+        print(output_file,f"Content Length: {len(content)} bytes")
+        print(output_file,f"\nFirst 500 characters of response:\n{content.decode('utf-8')[:500]}")
 
 def setup_flux(source_flux, measurement):
     schema = source_flux.replace("<measurement>", measurement)
@@ -108,17 +109,18 @@ def setup_flux(source_flux, measurement):
 
 def setup_table(measurement):
 # Ensure that openHAB creates the Hypertable
-    write_to_file(output_file,f"Adding {measurement} to 'persist_jdbc_everysecond' group for creation of hypertable.")
+    write_to_file(output_file,f"Ensuring hypertable exists for measurement {measurement}...")
+    print(output_file,f"Adding {measurement} to 'persist_jdbc_everysecond' group for creation of hypertable.")
     openhab_rest_api(measurement,"persist_jdbc_everysecond",True)
-    print("Sleeping for 10s so openHab can create the hypertable")
-    time.sleep(10)
-    write_to_file(output_file,f"Removing {measurement} from 'persist_jdbc_everysecond' group after creation of hypertable.")
+    print("Sleeping for 5s to allow openHAB to create the hypertable")
+    time.sleep(5)
+    print(output_file,f"Removing {measurement} from 'persist_jdbc_everysecond' group after creation of hypertable.")
     openhab_rest_api(measurement,"persist_jdbc_everysecond",False)
 
 
 def migrate_measurement(measurement):
     flux = setup_flux(schema,measurement)
-    write_to_file(output_file,f"Exporting measurement {measurement}...")
+    write_to_file(output_file,f"Exporting influxDB measurement {measurement} to postgresql...")
     influx.query_api().query(flux)
 
 # Ensure that openHAB creates the Hypertable
@@ -146,10 +148,7 @@ def migrate_measurement(measurement):
 
     return run_sql_statements(output_file,sql_statements)
 
-# ---------------------------------------------------------------------------   SWITCHES
-
-# list of switches
-
+# ------------------------------------- SWITCHES ----------------------------------------
 
 # 2. Generate and run export Flux for each measurement, the measurement will be written to the new postgress database with an "_old" postfix.
 if len(switches) > 0:
@@ -183,6 +182,7 @@ if len(switches) > 0:
     # Add the item to the everyChange persistance
         openhab_rest_api(m,"persist_jdbc_everyupdate",True)
 
+# ------------------------------------- NUMBERS ----------------------------------------
 
 if len(numbers) > 0:
     for m in numbers:
@@ -211,6 +211,8 @@ if len(numbers) > 0:
 
     # Add the item to the everyChange persistance
         openhab_rest_api(m,"persist_jdbc_everychange",True)
+
+# ------------------------------------- CONTACTS ----------------------------------------
 
 if len(contacts) > 0:
     write_to_file(output_file,"\n\n--- Migrating Contacts ---\n")
@@ -241,6 +243,50 @@ if len(contacts) > 0:
     # Add the item to the everyChange persistance
         openhab_rest_api(m,"persist_jdbc_everyupdate",True)
 
+# ------------------------------------- STRINGS ----------------------------------------
+
+if len(strings) > 0:
+    write_to_file(output_file,"\n\n--- Migrating Strings ---\n")
+    for m in strings:
+        schema = '''
+    import "sql"
+
+    from(bucket: "oh_bucket")
+    |> range(start: -14d)
+    |> filter(fn: (r) => r["_measurement"] == "<measurement>")
+    |> keep(columns: ["_time", "_value"])
+    |> map(fn: (r) => ({r with value: r._value, })
+            )  |> drop(columns: ["_value"])
+    |> rename(columns: {_time:"time"})
+    |> sql.to(
+            driverName: "postgres",
+            dataSourceName: "postgresql://<username>:<password>@<host>:<port>/<dbname>",
+            table: "<measurement>_old",
+    )
+
+    '''
+    # Migrate the measurement
+        error_occured = migrate_measurement(m)
+
+        if error_occured:
+            continue
+
+        # Add retention policy to the string table
+        sql_statements = [
+          "SELECT add_retention_policy('\"<measurement>\"', INTERVAL '<retentionpolicy>', if_not_exists => true);",
+        ]
+
+        for idx, item in enumerate(sql_statements):
+            sql_statements[idx] = item.replace("<measurement>", m)
+            sql_statements[idx] = sql_statements[idx].replace("<retentionpolicy>", default_string_retention_policy)
+
+        error_occured = run_sql_statements(output_file,sql_statements)
+        if error_occured:
+            continue
+
+        # Add the item to the everyChange persistance
+        openhab_rest_api(m,"persist_jdbc_everychange",True)
+        openhab_rest_api(m,"persist_jdbc_everyday",True)
 
 # Close the output file
 output_file.close()

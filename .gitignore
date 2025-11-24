@@ -8,6 +8,10 @@ mysecrets.py
 mynumbers.py
 myswitches.py
 mycontacts.py
+mystrings.py
 
 # Ignore output log files
 *.log
+
+# Ignore SQL files
+*.sql

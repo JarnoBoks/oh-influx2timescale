@@ -18,7 +18,7 @@
 
 ## Usage
 
-* Rename the sample files **mycontacts.sample.py**, **mynumbers.sample.py** and **myswitches.sample.py** to mycontacts.py, mynumbers.py and myswitches.py and paste your own items in them.
+* Rename the sample files **mycontacts.sample.py**, **mynumbers.sample.py**, **mystrings.sample.py** and **myswitches.sample.py** to mycontacts.py, mynumbers.py, mystrings.py and myswitches.py and paste your own items in them.
 * Rename the file **mysecrets.sample.py** to mysecrets.py and fill in your own connection details before running this script.
 * Run the script:
 
@@ -67,9 +67,14 @@ For each item in the switches, numbers and contacts lists:
    e. Manually compress the hypertable
 
    f. Set a default compression policy on the hypertable
-5. The openHAB REST API is called to add the item to the "persist_jdbc_everyupdate" group (for switches and contacts) or the "persist_jdbc_everychange" group (for numbers) so openHAB will persist any new updates/changes to the item.
 
-The script writes it output to stdout and in to a logfile in the same folder as the script. Check the logfile for any errors.
+   g. *For string items*: set a default retention policy of 7 days on the string hypertable. (this is configurable in mysecrets.py)
+5. The openHAB REST API is called to add the item to the *persist_jdbc_everyupdate*-group (for switches and contacts) or the *persist_jdbc_everychange*-group (for numbers and strings) so openHAB will persist any new updates/changes to the item.
+6. *For string items*: If a string isn’t updated at least once a week there is a risk that the retention policy will leave openHAB with an empty table for strings. To prevent this from happening, string items will be added to the *persist_jdbc_everyday*-group as well.
+
+   \
+
+The script will write its output to stdout and in to a logfile in the same folder as the script. Check the logfile for any errors.
 
 ## Additional information:
 
@@ -98,12 +103,20 @@ The script writes it output to stdout and in to a logfile in the same folder as 
         - everyUpdate
       filters:
         - excludeEmpty
+    - items:
+        - persist_jdbc_everyday*
+      strategies:
+        - everyDay
+      filters:
+        - excludeEmpty
   aliases: {}
   cronStrategies:
     - name: everySecond
       cronExpression: "* * * * * ? *"
     - name: everyHour
       cronExpression: 0 0 * * * ? *
+    - name: everyDay
+      cronExpression: 0 0 0 * * ? *
   defaultStrategies: []
   thresholdFilters: []
   timeFilters: []
