@@ -260,7 +260,7 @@ if len(contacts) > 0:
 
 if len(strings) > 0:
     write_to_file(output_file,"\n\n--- Migrating Strings ---\n")
-    schema = getBaseFlux("-14d", "r._value")
+    schema = getBaseFlux(strings_influx_range, "r._value")
 
     for m in strings:
     # Migrate the measurement
@@ -269,7 +269,7 @@ if len(strings) > 0:
             continue
 
     # Add retention policy
-        error_occured = addRetentionPolicy(m,default_string_retention_policy)
+        error_occured = addRetentionPolicy(m,string_retention_policy)
         if error_occured:
             continue
 
@@ -280,14 +280,8 @@ if len(strings) > 0:
 # ------------------------------------- COMBINED NUMBER ITEMS ----------------------------------------
 
 if len(numbers_combined) > 0:
+
     write_to_file(output_file,"\n\n--- Migrating Combined Numbers ---\n")
-    schema = getBaseFlux("0", "r._value")
-
-    # Replace the filter in the flux schema
-    needle = 'filter(fn: (r) => r["_measurement"] == "<measurement>" and r.item == "<measurement>")'
-    replacement = 'filter(fn: (r) => r["_measurement"] == "Energy" and r.item == "<measurement>")'
-    schema = schema.replace("<measurement>", "Energy")
-
     for m in numbers_combined:
         # Retrieve the real measurement and item names from the configuration file.
         measurement = m[1];

@@ -7,6 +7,12 @@
 #
 # Use an empty array if there are no string items to migrate.
 
+# The retention policy to be applied in TimescaleDB
+string_retention_policy = "7 days"
+
+# The InfluxDB range to be used when querying data to migrate
+strings_influx_range = "-10d"
+
 strings = [
     "my_string_item1",
     ]
