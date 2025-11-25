@@ -18,7 +18,9 @@
 
 ## Usage
 
-* Rename the sample files **mycontacts.sample.py**, **mynumbers.sample.py**, **mystrings.sample.py** and **myswitches.sample.py** to mycontacts.py, mynumbers.py, mystrings.py and myswitches.py and paste your own items in them.
+* Rename the sample files **mycontacts.sample.py**, **mynumbers.sample.py**, **mystrings.sample.py** and **myswitches.sample.py, mynumbers_ret45d.sample.py and mynumbers_combined.sample.py** to mycontacts.py, mynumbers.py, mystrings.py, myswitches.py, mynumbers_ret45d.py and mynumbers_combined.py and paste your own items in them.
+
+  Read the comments in the files to check how the included items will be migrated. The files have to exist, but if you do not want to migrate any items, just configure an empty array.
 * Rename the file **mysecrets.sample.py** to mysecrets.py and fill in your own connection details before running this script.
 * Run the script:
 
@@ -78,7 +80,7 @@ The script will write its output to stdout and in to a logfile in the same folde
 
 ## Additional information:
 
-* By default the script exports all pre-existing Influxdata to TimescaleDB. I had one table that was to big to be exported from InfluxDB (received timeouts). You can change the amount of data that will be exported by changing the ‘range’ items in the schema-flux.
+* By default the script exports all pre-existing Influxdata to TimescaleDB. I had one table that was to big to be exported from InfluxDB (received timeouts). I used the *numbers_ret45d* migration to overcome the timeout. Obviously this implies that any older data is lost, but for my usecase this was no issue.
 * See the documentation of the JDBC persistance for openHAB to clean up links from items to none existing tables at https://www.openhab.org/addons/persistence/jdbc/#maintenance
 * In order to let the script function, the JDBC persistancestrategy is setup with this yaml.
 
@@ -129,7 +131,7 @@ The script will write its output to stdout and in to a logfile in the same folde
   includeFilters: []
 
   ```
-* You can use a Javascript like this, to create a list of all switchtitems in your openHAB installation. Change the second line to Number or Contact for the other types.
+* You can use a Javascript like this, to create a list of all switchtitems in your openHAB installation. Change the second line to Number, Contact or String for the other types.
 
 ```javascript
 var txt='';
