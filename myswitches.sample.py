@@ -4,6 +4,8 @@
 #   No retention policy
 #   7d chunks
 #   compression enabled
+#
+# Use an empty array if there are no switch items to migrate.
 
 
 switches = [

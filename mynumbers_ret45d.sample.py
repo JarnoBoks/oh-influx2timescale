@@ -4,6 +4,8 @@
 #   Retention policy: 45 days
 #   7d chunks
 #   compression enabled
+#
+# Use an empty array if there are no number items to migrate.
 
 numbers45d_psql_retention_policy = "45 days"
 numbers45d_influx_range = "-45d"
