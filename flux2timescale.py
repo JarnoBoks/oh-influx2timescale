@@ -99,17 +99,9 @@ def openhab_rest_api(item, group, addgroup):
         print(output_file,f"Content Length: {len(content)} bytes")
         print(output_file,f"\nFirst 500 characters of response:\n{content.decode('utf-8')[:500]}")
 
-def setup_flux(source_flux, measurement):
-    schema = source_flux.replace("<measurement>", measurement)
-    schema = schema.replace("<username>", timescale_db_user)
-    schema = schema.replace("<password>", timescale_db_password)
-    schema = schema.replace("<host>", timescale_db_host)
-    schema = schema.replace("<port>", str(timescale_db_port))
-    schema = schema.replace("<dbname>", timescale_db_name)
-    return schema
 
-def setup_table(measurement):
-# Ensure that openHAB creates the Hypertable
+def create_postgresql_table(measurement):
+    # Ensure that openHAB creates the Hypertable
     write_to_file(output_file,f"Ensuring hypertable exists for measurement {measurement}...")
     print(output_file,f"Adding {measurement} to 'persist_jdbc_everysecond' group for creation of hypertable.")
     openhab_rest_api(measurement,"persist_jdbc_everysecond",True)
@@ -119,22 +111,22 @@ def setup_table(measurement):
     openhab_rest_api(measurement,"persist_jdbc_everysecond",False)
 
 
+
 def migrate_measurement(measurement):
-    flux = setup_flux(schema,measurement)
     write_to_file(output_file,f"Exporting influxDB measurement {measurement} to postgresql...")
+    flux = flux.replace("<measurement>", measurement)
     influx.query_api().query(flux)
 
-# Ensure that openHAB creates the Hypertable
-    setup_table(measurement)
+    # Ensure that openHAB creates the Hypertable
+    create_postgresql_table(measurement)
 
-# Migrate the measurement
-
-# a. Delete any rows in the openHAB created table by the 'everysecond' persistance
-# b. Enable compression on the openHAB created hypertable.
-# c. Insert all Influxdata items into the Hypertable
-# d. Drop the _old table
-# e. Manualy compress the hypertable
-# f. Set a default compression policy on the hypertable
+    # Migrate the measurement using SQL statements
+    # a. Delete any rows in the openHAB created table by the 'everysecond' persistance
+    # b. Enable compression on the openHAB created hypertable.
+    # c. Insert all Influxdata items into the Hypertable
+    # d. Drop the _old table
+    # e. Manualy compress the hypertable
+    # f. Set a default compression policy on the hypertable
     sql_statements = [
       "DELETE FROM \"<measurement>\";",
       "ALTER TABLE \"<measurement>\" SET (timescaledb.compress=true);",
@@ -149,6 +141,8 @@ def migrate_measurement(measurement):
 
     return run_sql_statements(output_file,sql_statements)
 
+
+
 def addRetentionPolicy(measurement, retentionpolicy):
     sql_statements = [
       "SELECT add_retention_policy('\"<measurement>\"', INTERVAL '<retentionpolicy>', if_not_exists => true);",
@@ -159,6 +153,7 @@ def addRetentionPolicy(measurement, retentionpolicy):
         sql_statements[idx] = sql_statements[idx].replace("<retentionpolicy>", retentionpolicy)
 
     return run_sql_statements(output_file,sql_statements)
+
 
 
 def getBaseFlux(range_start, mapping):
@@ -181,6 +176,12 @@ def getBaseFlux(range_start, mapping):
     '''
     flux = flux.replace("<range_start>", range_start)
     flux = flux.replace("<mapping>", mapping)
+    flux = flux.replace("<username>", timescale_db_user)
+    flux = flux.replace("<password>", timescale_db_password)
+    flux = flux.replace("<host>", timescale_db_host)
+    flux = flux.replace("<port>", str(timescale_db_port))
+    flux = flux.replace("<dbname>", timescale_db_name)
+
     return flux
 
 
