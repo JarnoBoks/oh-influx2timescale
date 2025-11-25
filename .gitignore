@@ -4,11 +4,12 @@
 # Ignore mysecrets.py which contains sensitive connection details
 mysecrets.py
 
-# Ignore locat setup files
-mynumbers.py
-myswitches.py
-mycontacts.py
-mystrings.py
+# Ignore all local configuration files, except if they have the .sample.py extension
+mynumbers*.py
+myswitches*.py
+mycontacts*.py
+mystrings*.py
+!*.sample.py
 
 # Ignore output log files
 *.log
