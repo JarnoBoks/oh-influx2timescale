@@ -7,7 +7,10 @@
 #
 # Use an empty array if there are no number items to migrate.
 
+# The retention policy to be applied in TimescaleDB
 numbers45d_psql_retention_policy = "45 days"
+
+# The InfluxDB range to be used when querying data to migrate
 numbers45d_influx_range = "-45d"
 
 numbers_45d = [

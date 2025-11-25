@@ -13,6 +13,7 @@ from mynumbers_ret45d import *
 from mycontacts import *
 from myswitches import *
 from mystrings import *
+from mynumbers_combined import *
 
 # Setup InfluxDB client
 influx = InfluxDBClient(url=influxdb_url, token=influxdb_token, org=influxdb_org, timeout=400000)
@@ -230,13 +231,13 @@ if len(numbers) > 0:
     schema = getBaseFlux("0", "r._value")
 
     for m in numbers:
-    # Migrate the measurement
+        # Migrate the measurement
         error_occured = migrate_measurement(m)
 
         if error_occured:
             continue
 
-    # Add the item to the everyChange persistance
+        # Add the item to the everyChange persistance
         openhab_rest_api(m,"persist_jdbc_everychange",True)
 
 # ------------------------------------- CONTACTS ----------------------------------------
@@ -246,13 +247,13 @@ if len(contacts) > 0:
     schema = getBaseFlux("0", "if r._value >= 1 then \"OPEN\" else \"CLOSED\"")
 
     for m in contacts:
-    # Migrate the measurement
+        # Migrate the measurement
         error_occured = migrate_measurement(m)
 
         if error_occured:
             continue
 
-    # Add the item to the everyChange persistance
+        # Add the item to the everyChange persistance
         openhab_rest_api(m,"persist_jdbc_everyupdate",True)
 
 # ------------------------------------- STRINGS ----------------------------------------
@@ -275,6 +276,38 @@ if len(strings) > 0:
         # Add the item to the everyChange persistance
         openhab_rest_api(m,"persist_jdbc_everychange",True)
         openhab_rest_api(m,"persist_jdbc_everyday",True)
+
+# ------------------------------------- COMBINED NUMBER ITEMS ----------------------------------------
+
+if len(numbers_combined) > 0:
+    write_to_file(output_file,"\n\n--- Migrating Combined Numbers ---\n")
+    schema = getBaseFlux("0", "r._value")
+
+    # Replace the filter in the flux schema
+    needle = 'filter(fn: (r) => r["_measurement"] == "<measurement>" and r.item == "<measurement>")'
+    replacement = 'filter(fn: (r) => r["_measurement"] == "Energy" and r.item == "<measurement>")'
+    schema = schema.replace("<measurement>", "Energy")
+
+    for m in numbers_combined:
+        # Retrieve the real measurement and item names from the configuration file.
+        measurement = m[1];
+        influx_table = m[0];
+
+        # Replace the filter in the flux schema to get the correct measurement and item
+        schema = getBaseFlux("0", "r._value");
+        search_str = f'filter(fn: (r) => r["_measurement"] == "<measurement")'
+        replace_str = f'filter(fn: (r) => r["_measurement"] == "{influx_table}" and r.item == "<measurement>")'
+        schema = schema.replace(search_str, replace_str)
+
+        # Migrate the measurement
+        error_occured = migrate_measurement(measurement)
+
+        if error_occured:
+            continue
+
+        # Add the item to the everyChange persistance
+        openhab_rest_api(m,"persist_jdbc_everychange",True)
+
 
 # Close the output file
 output_file.close()
