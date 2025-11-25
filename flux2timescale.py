@@ -9,6 +9,7 @@ import time
 # ------------ CONSTANTS AND SETUP ----------------------------------
 from mysecrets import *
 from mynumbers import *
+from mynumbers_ret45d import *
 from mycontacts import *
 from myswitches import *
 from mystrings import *
@@ -148,21 +149,27 @@ def migrate_measurement(measurement):
 
     return run_sql_statements(output_file,sql_statements)
 
-# ------------------------------------- SWITCHES ----------------------------------------
+def addRetentionPolicy(measurement, retentionpolicy):
+    sql_statements = [
+      "SELECT add_retention_policy('\"<measurement>\"', INTERVAL '<retentionpolicy>', if_not_exists => true);",
+    ]
 
-# 2. Generate and run export Flux for each measurement, the measurement will be written to the new postgress database with an "_old" postfix.
-if len(switches) > 0:
-    write_to_file(output_file,"\n\n--- Migrating Switches ---\n")
-    for m in switches:
+    for idx, item in enumerate(sql_statements):
+        sql_statements[idx] = item.replace("<measurement>", measurement)
+        sql_statements[idx] = sql_statements[idx].replace("<retentionpolicy>", retentionpolicy)
 
-        schema = '''
+    return run_sql_statements(output_file,sql_statements)
+
+
+def getBaseFlux(range_start, mapping):
+    flux = '''
     import "sql"
 
     from(bucket: "oh_bucket")
-    |> range(start: 0)
+    |> range(start: <range_start>)
     |> filter(fn: (r) => r["_measurement"] == "<measurement>")
     |> keep(columns: ["_time", "_value"])
-    |> map(fn: (r) => ({r with value: if r._value >= 1 then "ON" else "OFF", })
+    |> map(fn: (r) => ({r with value: <mapping>, })
             )  |> drop(columns: ["_value"])
     |> rename(columns: {_time:"time"})
     |> sql.to(
@@ -172,6 +179,19 @@ if len(switches) > 0:
     )
 
     '''
+    flux = flux.replace("<range_start>", range_start)
+    flux = flux.replace("<mapping>", mapping)
+    return flux
+
+
+# ------------------------------------- SWITCHES ----------------------------------------
+
+# 2. Generate and run export Flux for each measurement, the measurement will be written to the new postgress database with an "_old" postfix.
+if len(switches) > 0:
+    write_to_file(output_file,"\n\n--- Migrating Switches ---\n")
+    schema = getBaseFlux("0", "if r._value >= 1 then \"ON\" else \"OFF\"")
+
+    for m in switches:
 
     # Migrate the measurement
         error_occured = migrate_measurement(m)
@@ -182,27 +202,33 @@ if len(switches) > 0:
     # Add the item to the everyChange persistance
         openhab_rest_api(m,"persist_jdbc_everyupdate",True)
 
-# ------------------------------------- NUMBERS ----------------------------------------
+# ------------------------------------- NUMBERS 45d retention ----------------------------------------
+
+if len(numbers_45d) > 0:
+    write_to_file(output_file,"\n\n--- Migrating Numbers with 45d retention policy ---\n")
+    schema = getBaseFlux(numbers45d_influx_range, "r._value")
+    for m in numbers_45d:
+
+    # Migrate the measurement
+        error_occured = migrate_measurement(m)
+        if error_occured:
+            continue
+
+    # Add retention policy
+        error_occured = addRetentionPolicy(m,numbers45d_psql_retention_policy)
+        if error_occured:
+            continue
+
+    # Add the item to the everyChange persistance
+        openhab_rest_api(m,"persist_jdbc_everychange",True)
+
+# ------------------------------------- NUMBERS -----------------------------------
 
 if len(numbers) > 0:
+    write_to_file(output_file,"\n\n--- Migrating Numbers ---\n")
+    schema = getBaseFlux("0", "r._value")
+
     for m in numbers:
-        schema = '''
-    import "sql"
-
-    from(bucket: "oh_bucket")
-    |> range(start: 0)
-    |> filter(fn: (r) => r["_measurement"] == "<measurement>")
-    |> keep(columns: ["_time", "_value"])
-    |> map(fn: (r) => ({r with value: r._value, })
-            )  |> drop(columns: ["_value"])
-    |> rename(columns: {_time:"time"})
-    |> sql.to(
-            driverName: "postgres",
-            dataSourceName: "postgresql://<username>:<password>@<host>:<port>/<dbname>",
-            table: "<measurement>_old",
-    )
-
-    '''
     # Migrate the measurement
         error_occured = migrate_measurement(m)
 
@@ -216,24 +242,9 @@ if len(numbers) > 0:
 
 if len(contacts) > 0:
     write_to_file(output_file,"\n\n--- Migrating Contacts ---\n")
+    schema = getBaseFlux("0", "if r._value >= 1 then \"OPEN\" else \"CLOSED\"")
+
     for m in contacts:
-        schema = '''
-    import "sql"
-
-    from(bucket: "oh_bucket")
-    |> range(start: 0)
-    |> filter(fn: (r) => r["_measurement"] == "<measurement>")
-    |> keep(columns: ["_time", "_value"])
-    |> map(fn: (r) => ({r with value: if r._value >= 1 then "OPEN" else "CLOSED", })
-            )  |> drop(columns: ["_value"])
-    |> rename(columns: {_time:"time"})
-    |> sql.to(
-            driverName: "postgres",
-            dataSourceName: "postgresql://<username>:<password>@<host>:<port>/<dbname>",
-            table: "<measurement>_old",
-    )
-
-    '''
     # Migrate the measurement
         error_occured = migrate_measurement(m)
 
@@ -247,40 +258,16 @@ if len(contacts) > 0:
 
 if len(strings) > 0:
     write_to_file(output_file,"\n\n--- Migrating Strings ---\n")
+    schema = getBaseFlux("-14d", "r._value")
+
     for m in strings:
-        schema = '''
-    import "sql"
-
-    from(bucket: "oh_bucket")
-    |> range(start: -14d)
-    |> filter(fn: (r) => r["_measurement"] == "<measurement>")
-    |> keep(columns: ["_time", "_value"])
-    |> map(fn: (r) => ({r with value: r._value, })
-            )  |> drop(columns: ["_value"])
-    |> rename(columns: {_time:"time"})
-    |> sql.to(
-            driverName: "postgres",
-            dataSourceName: "postgresql://<username>:<password>@<host>:<port>/<dbname>",
-            table: "<measurement>_old",
-    )
-
-    '''
     # Migrate the measurement
         error_occured = migrate_measurement(m)
-
         if error_occured:
             continue
 
-        # Add retention policy to the string table
-        sql_statements = [
-          "SELECT add_retention_policy('\"<measurement>\"', INTERVAL '<retentionpolicy>', if_not_exists => true);",
-        ]
-
-        for idx, item in enumerate(sql_statements):
-            sql_statements[idx] = item.replace("<measurement>", m)
-            sql_statements[idx] = sql_statements[idx].replace("<retentionpolicy>", default_string_retention_policy)
-
-        error_occured = run_sql_statements(output_file,sql_statements)
+    # Add retention policy
+        error_occured = addRetentionPolicy(m,default_string_retention_policy)
         if error_occured:
             continue
 
