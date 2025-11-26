@@ -164,8 +164,8 @@ def getBaseFlux(range_start, mapping):
     |> range(start: <range_start>)
     |> filter(fn: (r) => r["_measurement"] == "<measurement>")
     |> keep(columns: ["_time", "_value"])
-    |> map(fn: (r) => ({r with value: <mapping>, })
-            )  |> drop(columns: ["_value"])
+    |> map(fn: (r) => ({r with value: <mapping>, }))
+    |> drop(columns: ["_value"])
     |> rename(columns: {_time:"time"})
     |> sql.to(
             driverName: "postgres",
@@ -288,9 +288,12 @@ if len(numbers_combined) > 0:
 
         # Replace the filter in the flux schema to get the correct measurement and item
         flux = getBaseFlux("0", "r._value");
-        search_str = f'filter(fn: (r) => r["_measurement"] == "<measurement")'
-        replace_str = f'filter(fn: (r) => r["_measurement"] == "{influx_table}" and r.item == "<measurement>")'
-        flux = flux.replace(search_str, replace_str)
+
+        #Original filter:       |> filter(fn: (r) => r["_measurement"] == "<measurement>")
+        #New filter     :       |> filter(fn: (r) => r["_measurement"] == "<influx_table>" and r.item == "<measurement>")
+
+        # Replace the first occurance of '<measurement>' in the flux with the correct influx_table and the item filter
+        flux=flux.replace("<measurement>", influx_table + "\" and r.item == \"<measurement>", 1)
 
         # Migrate the measurement
         error_occured = migrate_measurement(flux, measurement)
@@ -299,7 +302,7 @@ if len(numbers_combined) > 0:
             continue
 
         # Add the item to the everyChange persistance
-        openhab_rest_api(m,"persist_jdbc_everychange",True)
+        openhab_rest_api(measurement,"persist_jdbc_everychange",True)
 
 
 # Close the output file
