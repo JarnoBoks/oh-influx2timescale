@@ -129,7 +129,7 @@ def migrate_measurement(flux,measurement):
     sql_statements = [
       "DELETE FROM \"<measurement>\";",
       "ALTER TABLE \"<measurement>\" SET (timescaledb.compress=true);",
-      "INSERT INTO \"<measurement>\" SELECT time::timestamp without time zone AT TIME ZONE '<influx_tz>', value FROM \"<measurement>\" ORDER BY time ASC;",
+      "INSERT INTO \"<measurement>\" (time, value) SELECT time::timestamp without time zone AT TIME ZONE '<influx_tz>', value FROM \"<measurement>_old\" ORDER BY time ASC;",
       "DROP TABLE \"<measurement>_old\";",
       "SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('\"<measurement>\"',   now()::timestamp - INTERVAL '1 week', now()::timestamp - INTERVAL '5 years'  ) i;",
       "SELECT add_compression_policy('\"<measurement>\"', INTERVAL '7 days', if_not_exists => true);",
