@@ -9,7 +9,7 @@ mynumbers*.py
 myswitches*.py
 mycontacts*.py
 mystrings*.py
-!*.sample.py
+!*_sample.py
 
 # Ignore output log files
 *.log

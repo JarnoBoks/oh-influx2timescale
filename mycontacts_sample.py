@@ -5,8 +5,9 @@
 #   7d chunks
 #   compression enabled
 #
-# Use an empty array if there are no contact items to migrate.
 
+# Array of strings representing openHAB contact items to be migrated to TimescaleDB, fe.
+# ["ItemName1", "ItemName2", ...]
+# Use an empty array if there are no contact items to migrate.
 contacts = [
-    "my_contact_item1",
     ]

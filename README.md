@@ -18,11 +18,11 @@
 
 ## Usage
 
-* Rename the sample files **mycontacts.sample.py**, **mynumbers.sample.py**, **mystrings.sample.py** and **myswitches.sample.py, mynumbers_ret45d.sample.py and mynumbers_combined.sample.py** to mycontacts.py, mynumbers.py, mystrings.py, myswitches.py, mynumbers_ret45d.py and mynumbers_combined.py and paste your own items in them.
+* Rename the sample files **mycontacts-sample.py**, **mynumbers-sample.py**, **mystrings-sample.py** and **myswitches-sample.py, mynumbers_ret45d-sample.py and mynumbers_combined-sample.py** to mycontacts.py, mynumbers.py, mystrings.py, myswitches.py, mynumbers_ret45d.py and mynumbers_combined.py and paste your own items in them.
 
-  Read the comments in the files to check how the included items will be migrated. The files have to exist, but if you do not want to migrate any items, just configure an empty array.
-* Rename the file **mysecrets.sample.py** to mysecrets.py and fill in your own connection details before running this script.
-* Run the script:
+  Read the comments in the files to check how the included items will be migrated. If an item configuration file does not exist, the script will skip the migration of the specific item type. This could be benificial if you encountered an error and only want to redo the migration for a select group of items. Do not change the *sample*-files, otherwise the script will break.
+* Rename the file **mysecrets.sample.py** to mysecrets.py and fill in your own connection details before running the script.
+* Run the migration script:
 
   `python flux2timescale.py`
 

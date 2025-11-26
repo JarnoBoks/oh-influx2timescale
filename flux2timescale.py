@@ -8,12 +8,37 @@ import time
 
 # ------------ CONSTANTS AND SETUP ----------------------------------
 from mysecrets import *
-from mynumbers import *
-from mynumbers_ret45d import *
-from mycontacts import *
-from myswitches import *
-from mystrings import *
-from mynumbers_combined import *
+
+try:
+    from mynumbers import *
+except ImportError:
+    from mynumbers_sample import *
+
+try:
+    from mynumbers_ret45d import *
+except ImportError:
+    from mynumbers_ret45d_sample import *
+
+try:
+    from mycontacts import *
+except ImportError:
+    from mycontacts_sample import *
+
+try:
+    from myswitches import *
+except ImportError:
+    from myswitches_sample import *
+
+try:
+    from mystrings import *
+except ImportError:
+    from mystrings_sample import *
+
+try:
+    from mynumbers_combined import *
+except ImportError:
+    from mynumbers_combined_sample import *
+
 
 # Setup InfluxDB client
 influx = InfluxDBClient(url=influxdb_url, token=influxdb_token, org=influxdb_org, timeout=400000)
