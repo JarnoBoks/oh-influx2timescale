@@ -56,6 +56,12 @@ if os.path.exists(output_file_path):
 
 output_file = open(output_file_path, "x")
 
+# Setup the Long Item name error log file
+long_itemname_error_logfile_path = "flux2timescale_long_itemname_errors" + "_" + current_datetime + ".log"
+if os.path.exists(long_itemname_error_logfile_path):
+  os.remove(long_itemname_error_logfile_path)
+long_itemname_error_logfile = open(long_itemname_error_logfile_path, "x")
+
 # ---------------------------------------------------------------------------   FUNCTIONS
 
 # Write to file and print to console
@@ -138,6 +144,13 @@ def create_postgresql_table(measurement):
 
 def migrate_measurement(flux,measurement):
     write_to_file(output_file,f"Exporting influxDB measurement {measurement} to postgresql...")
+
+    # PostgreSQL identifiers can have a maximum length of 63 characters. To ensure the postfix '_old' can be added, the itemname should be at most 59 characters long.
+    if len(measurement) > 59:
+        write_to_file(output_file,f"ERROR: Measurement name '{measurement}' exceeds the maximum length of 63 characters for PostgreSQL identifiers. Skipping migration of this measurement.")
+        write_to_file(long_itemname_error_logfile,f"{measurement}")
+        return True
+
     flux = flux.replace("<measurement>", measurement)
     influx.query_api().query(flux)
 

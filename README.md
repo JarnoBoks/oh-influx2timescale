@@ -35,6 +35,7 @@
 ## Pre-conditions
 
 * The script expects that the influxDB v2 database has measurements with the openHAB data in it, the measurements should have the name of the openHAB item.
+* PostgreSQL/TimescaleDB have a limitiation for the maximum length of a tablename/identifier. The migration will fale on longer names. Ensure the id’s of your openHAB items are shorter than 63 characters.
 * TimescaleDB is installed and configured correctly for the database openhab_db
 * The openHAB JDBC persistance is setup and working correctly with TimescaleDB, the database should be emtpy before starting the migration
 * The openHAB JDBC persistance strategy "everysecond" is configured and working correctly and is applied for items in the `persist_jdbc_everysecond` group
